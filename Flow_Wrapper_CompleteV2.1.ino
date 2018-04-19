@@ -4,12 +4,13 @@
    * Note that overloaded function writeLCD() can only print those types of data it is overloaded for
    * Also introduces a 1.5 minute startup delay on power up to allow the VFDs to unscramble their brains
    * Also introduces checks to ensure jaws make complete cycle during startup to avoid weird pwm bugs resulting from less than full cycle
-   * Also disables pin change interrupts when stop button pressed, reenables when start button pressed UNTESTED
+   * Also disables pin change interrupts when stop button pressed, reenables when start button pressed
+   * Also introduces a timing comparison between the paper register and feeder fingers to adjust for accumulated encoder error
    * 
-   * V2.0 introduced PID control of the feeder chain to match the paper speed. 
+   V2.0 introduced PID control of the feeder chain to match the paper speed. 
   Also introduced Timer1 set as 16bit to enable 10bit pwm on pins 9 and 10(jaw and feeder pwm) for greater resolution(1024 steps vs 255)
   Also utilizes encoders on paper drive and feeder drive to match speeds correctly utilizing the PID control.
-  This version introduces a timed-loop control for consistent response time for both button commands and run operation.
+  This version introduces a timed-main loop control for consistent response time for both button commands and run operation.
   includes live printout of speed errors, and current PID scalars along with ability to adjust during run operation WITHOUT SAVING
   Also splits the jaw and paper register interrupts into separate pin change ISRs.
   Note that feeder speed is adjusted by PID, but jaw speed is hard coded in this version. 
@@ -67,14 +68,7 @@ const int stopAll = 1;
 volatile int paperHome = 0, paperhomeflag = 0, fingerHomeFlag = 0, pkgcount = -9, lastpkgcount = 0;
 volatile int jawhomeflag = 0;
 volatile long int PaperCount = 0, FeederCount = 0; //counters for the encoders
-volatile long int pkgTime = 0, lastPkgTime = 0;
-
-////length of register mark in mm, package length in mm, packages per minute(default to enable homing at startup
-////packages per minute = jaw RPMs
-//const float pkgLength = 111;
-//const float maxPkgPerMinute = 580; //this is used for converting the pkgPerMinute to voltage output to control jaws
-//                             //motor rpm @ 60Hz = 1750 plus roughly a 3:1 reduction on jaw drive gives ~580 rpm per minute max.
-//                             //NOTE: Can increase max motor rpm by increasing vfd max frequency above 60Hz
+volatile long int pkgTime = 0, lastPkgTime = 0; 
 
 float pkgPerMinute = 0;
 long feeder_count = 0, paper_count = 0, feeder_error = 0;
@@ -94,17 +88,17 @@ float kp = 0.08, ki = 0.006, kd = 0.6; //kp = 0.08, ki = 0.006, kd = 0.6 good st
 
 //scalars for startup at close to correct speeds. based on paper_speed = 10. feeder verified 4/4/18
 //bitScale converts from the 8-bit pwm write for paper speed to the 10-bit pwm write for jaw and feeder speed
-volatile float timingScalar = 0;
+volatile float timingScalar = 0; //this is a small scalar based on time difference between paper register and feeder finger
 const float jawScalar = 3.6, feederScalar = 5.38, bitScale = 4.01, countScalar = 1.343; 
-long int fingerTimecopy = 0, lastPkgTimecopy = 0;    
-float timingScalarcopy = 0; 
+long fingerTimecopy = 0, lastPkgTimecopy = 0;  //non volatile copies for the timing scalar  
+float timingScalarcopy = 0; //this is a non volatile copy
 const int offset = 300; //timing offset between finger and register
 volatile long int timeDifference = 0, fingerTime = 0; //time difference between register and finger
-volatile int ptf = 0, tdc = 0;
-int resetFlag = 0;
+volatile int ptf = 0, tdc = 0; //for testing
+int resetFlag = 0; //trying to implement this
 
 //declare buttons
- Button settingsBtn(SettingsBtn, PULLUP, INVERT, DEBOUNCE_MS);    //Declare settings button on A0; 
+ Button settingsBtn(SettingsBtn, PULLUP, INVERT, DEBOUNCE_MS);    //Declare settings button on D6; 
  Button stopBtn(StopBtn, PULLUP, INVERT, DEBOUNCE_MS);    //Declare stop button on A1; 
  Button startBtn(StartBtn, PULLUP, INVERT, DEBOUNCE_MS);    //Declare start button on A2; 
  
@@ -127,8 +121,8 @@ void setup()
 
   pinMode(RegisterEncoder_PIN, INPUT_PULLUP); //interrupt counters for the encoder pulses; set to input pullup to enable pullup resistors
   pinMode(FeederEncoder_PIN, INPUT_PULLUP); //interrupt counters for the encoder pulses; set to input pullup to enable pullup resistors
-  pinMode(JawPos_PIN, INPUT_PULLUP);
-  pinMode(RegisterSensor_PIN, INPUT_PULLUP); 
+  pinMode(JawPos_PIN, INPUT_PULLUP); //jaw position
+  pinMode(RegisterSensor_PIN, INPUT_PULLUP); //paper register mark
   pinMode(PattySensor_PIN, INPUT_PULLUP); //senses a patty upon startup for homing
   pinMode(FeederFinger_PIN, INPUT); //senses the feeder finger on startup for homing
   pinMode(jawPWM, OUTPUT); //jaw speed
@@ -141,11 +135,7 @@ void setup()
   attachInterrupt(digitalPinToInterrupt(RegisterEncoder_PIN), paperEncoderISR, CHANGE); //triggers on change, counts paper encoder pulses
   attachInterrupt(digitalPinToInterrupt(FeederEncoder_PIN), feederEncoderISR, CHANGE); //triggers on change, counts feeder chain encoder pulses
 
-  //PWM rate settings Adjust to desired PWM Rate
-  ////TCCR1B = TCCR1B & B11111000 | B00000010;    // set timer 1 divisor to     8 for PWM frequency of  3921.16 Hz
-  //TCCR1B = TCCR1B & B11111000 | B00000011;    // set timer 1 divisor to    64 for PWM frequency of   490.20 Hz (The DEFAULT)
-
-// Set pwm clock divider
+  //Set pwm clock divider
 TCCR1B = 0x09;  // set Control Register to no prescaling 
                   // WGM02 = 1
 TCCR1A = 0x03;  // set WGM01 and WGM00 to 1 (10 bit resolution--> 0 to 1024)
@@ -154,7 +144,6 @@ TCCR1A = 0x03;  // set WGM01 and WGM00 to 1 (10 bit resolution--> 0 to 1024)
   Wire.begin();
   Serial.begin(9600);
   writeLCD("WAIT");
-  //Serial.println("Hal9000 V2.1 Online");
   
   //put this turn-off here after the fireup print statement, works best for ensuring no random movement
   //shut all vfds off now to prevent random movement during startup
@@ -176,7 +165,7 @@ void loop()
   
   button_results(); //deal with which buttons were read
   
-  unsigned long currentTime = millis();
+  unsigned long currentTime = millis(); //get the current time
   if((unsigned long)(currentTime - oldTime) >= loop_time) //we are on a timed loop every 100 ms
   {
     oldTime = millis(); //get the current time to reset timed loop
@@ -185,15 +174,14 @@ void loop()
     {         
         PCICR &= ~(1 << PCIE1);//disable finger interrupt
         timingScalarcopy = timingScalar; //copy to a non volatile for use
-        tdc = timeDifference;
-        //lastPkgTimecopy = pkgTime;
-        //fingerTimecopy = fingerTime;
+        tdc = timeDifference; //copy for printing out for testing, this is the time difference for scaling to avoid cumulative error
         PCICR |= bit (PCIE1);//enable finger interrupt
         
         PCICR &= ~(1 << PCIE0); //disable pin change interrupts for port B
         PCICR &= ~(1 << PCIE2);    // disable pin change interrupts for D0 to D7 //halt the encoder interrupts while making a copy
         feeder_count = FeederCount; //copy the pulse count into a non volatile variable to prevent modification during use; these are long ints, they are reset on startup
         paper_count = PaperCount; //copy the pulse count into a non volatile variable to prevent modification during use; these are long ints, they are reset on startup
+//testing these lines still.....causes feeder chain to go nuts when they hit, not the current issue
 //        if(resetFlag) //reset encoder counters every so often to keep them from becoming mega large as fast
 //        {
 //          resetFlag = 0; //reset flag
@@ -202,40 +190,36 @@ void loop()
 //        }
         PCICR |= bit (PCIE0); //enable pin change interrupts for port B
         PCICR |= bit (PCIE2);    // enable pin change interrupts for D0 to D7 //re-enable the encoder interrupts after copying
-        //float temp = (paper_count + (80 + timingScalarcopy)); //there is a difference of 80 pulses per package between the feeder and paper encoders; increase timingScalarcopy to increase feeder speed
-        long temp = (paper_count * (countScalar + timingScalarcopy)) + 0.5; //increase timingScalarcopy to increase feeder speed
-        feeder_error = temp - feeder_count; //get the difference in the pulse numbers
+        //untested, just a thought://float temp = (paper_count + (80 + timingScalarcopy)); //there is a difference of 80 pulses per package between the feeder and paper encoders; increase timingScalarcopy to increase feeder speed
+        long temp = (paper_count * (countScalar + timingScalarcopy)) + 0.5; //increase timingScalarcopy to increase feeder speed; there are different pulse numbers for paper and feeder encoders so scale
+        feeder_error = temp - feeder_count; //get the difference in the encoder pulse numbers
        
         feederPID(); //calculate the PID to adjust feeder chain speed
         analogWrite(feederPWM, feeder_speed); //adjust the feeder chain speed
       
-        pkgPerMinute = 1.0 / (pkgTime * 0.000001667); //packages per minute = 1 package / (# of milliseconds passed * portion of minute passed)
-
+        //pkgPerMinute = 1.0 / (pkgTime * 0.000001667); //packages per minute = 1 package / (# of milliseconds passed * portion of minute passed)
+//still testing these lines.....
 //        if((paper_count > 10010) && (feeder_count > 10010)) //check to make sure there is no negative number
 //          resetFlag = 1; //set flag to reduce encoder counters to keep them from becoming mega large as fast
 //          
-      if((pkgcount > 0) && (pkgcount != lastpkgcount)) //only print pkgcount when it changes, and skip the first 10 since they are empties from machine start
+      if((pkgcount > 0) && (pkgcount != lastpkgcount)) //only print pkgcount when it changes
       {
         lastpkgcount = pkgcount; //update
         //writeLCD(pkgCount);
         //writeLCD(timeDifference);
         printData(4); //send information out
-        Serial.print(paper_count);
-        Serial.print(", ");
-        Serial.println(feeder_count);
-        //printData(5);
       }
-      if(ptf) //for testing. prints every time a finger is seen
-      {
-        ptf = 0;
-        Serial.print("paper PWM: ");
-        Serial.print(paper_speed);
-        Serial.print("\t");
-        Serial.print("timingScalarcopy: ");
-        Serial.print(timingScalarcopy*100);
-        Serial.print("\t");
-        Serial.println(tdc);
-      }
+//       if(ptf) //for testing. prints every time a finger is seen
+//       {
+//         ptf = 0;
+//         Serial.print("paper PWM: ");
+//         Serial.print(paper_speed);
+//         Serial.print("\t");
+//         Serial.print("timingScalarcopy: ");
+//         Serial.print(timingScalarcopy*100);
+//         Serial.print("\t");
+//         Serial.println(tdc);
+//       }
     }//end runtime if statement
     else if(StartBtnState && !StopBtnState && startupFlag) //we have a run condition and we are starting up 
     { 
@@ -259,9 +243,9 @@ ISR (PCINT1_vect) //feeder chain timing
     if(!fingerHomeFlag) //normal run operation
     {
       timeDifference = (long)(millis() - (pkgTime + offset)); //time difference between paper register and feeder finger, paper register is always ahead slightly so shift with offset
-        //fingerTime = millis();
+        
         ptf = 1; //for testing
-        //******maybe instead just add or subtract from paper encoder count to adjust speed
+        //******maybe instead just add or subtract from paper encoder count to adjust speed?
       if(timeDifference > 40) //if the time between the register and finger is out of desired range
         timingScalar += 0.001; //speeds up the feeder chain
         //timingScalar += 1; //speed up feeder chain
@@ -287,7 +271,7 @@ ISR (PCINT0_vect) //paper register ISR
    {
       if(!paperHome) //we are not homing
       {
-        analogWrite(jawPWM, jaw_speed); //write the speed of the film during cut
+        analogWrite(jawPWM, jaw_speed); //write the speed of the film during cut(hard coded)
         PORTC |= (1 << PORTC3); //enable the jaws
        
         pkgcount++; //increment the package count
@@ -312,30 +296,29 @@ ISR (PCINT2_vect) //jaw control ISR
    //check for jaw trigger
    if ((PIND & bit (4)))  //if it was change to high, we know jaws are at HOME
    {    
-      if(jawhomeflag != -1) //used for startup only
+      if(jawhomeflag != -1) //check for startup 
       {
           PORTC &= ~(1 << PORTC3); //we are at home position so shut off jaws and wait for register trigger
           jawhomeflag = 1; //used for startup
-      }
-       
+      }       
    }
    else //it was jaw change to low, so we know jaw just finished CUTTING
    {
         int temp = 5.6 * jaw_speed;
-        analogWrite(jawPWM, temp); //write 2x the speed during homing 
+        analogWrite(jawPWM, temp); //write 5.6x the film speed during homing 
         if(jawhomeflag == -1) //used for startup only
           jawhomeflag = 2;
    }
  }  // end of PCINT2_vect
 
 
-void paperEncoderISR() //used to detect beginning of and end of register mark since used for film speed; Pin1 triggers on HIGH
+void paperEncoderISR() //used to detect paper encoder pulses. Triggers on CHANGE
 {
   PaperCount++; //increment counter
 }//end paperencoder ISR
 
 //ISR
-void feederEncoderISR() //used to detect feeder chain fingers Pin2 triggers on HIGH
+void feederEncoderISR() //used to detect paper encoder pulses. Triggers on CHANGE
 {
   FeederCount++; //increment counter
 }//end feederencoder ISR
