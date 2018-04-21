@@ -35,4 +35,3 @@ void button_results()
     setBtnFlag = 1;
   }
 }
-
