@@ -54,4 +54,3 @@ void feederPID(void) //calculate PID control for the feeder chain speed
 //  temp = map(temp, 0, maxchainTime, 15, 155); //
 //  jawpwm = constrain(temp, 15, 155); //0 = 0v, 255 = 10v = full speed!
 //}
-
