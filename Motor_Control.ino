@@ -67,7 +67,7 @@ void motorDrive(int state)
             //Serial.println("homing feeder");
              writeLCD("homing and priming feeder");
           }
-          if(!(PIND & bit(PattySensor_PIN))) //pin goes LOW when we see a patty
+          if((PIND & bit(PattySensor_PIN))) //pin goes HIGH when we see a patty
           {
             homeflag = 0; //reset flag
             startupFlag = 4; //we saw a patty, now we can home the feeder chain
@@ -106,9 +106,9 @@ void motorDrive(int state)
             jaw_speed = (paper_speed * jawScalar) + 0.5; //start at scaled speed of paper, add 0.5 so it is rounded to nearest integer by truncation
             feeder_speed = (paper_speed * feederScalar) + 0.5; //start at scaled speed of paper, add 0.5 so it is rounded to nearest integer by truncation
             //now we set the starting PWMs
-            analogWrite(jawPWM, jaw_speed); //write the speed of the film during cut;23
-            analogWrite(paperPWM, paper_speed); //write the speed during homing;10
-            analogWrite(feederPWM, feeder_speed); //write the speed during homing;52
+            analogWrite(jawPWM, jaw_speed); //write the speed of the film for run;23
+            analogWrite(paperPWM, paper_speed); //write the speed for run;10; constant
+            analogWrite(feederPWM, feeder_speed); //write the speed for run;52; this is only start speed, the PID takes control after this
             //Serial.print("test");
             //now we activate the vfds
             PORTC |= (1 << PORTC3); //enable the jaws vfd
@@ -139,11 +139,12 @@ void motorDrive(int state)
       }
     }while(dataloop == 1);  
 
-    paper_speed = (3.2998 * pkgPerMinute - 0.4401) * 0.1; //this equation obtained by graphing pwm vs rpm; paper_speed is an int to truncate decimals. Multiply by 0.1 to scale pwm
-        
+    paper_speed = (3.2998 * setpoint - 0.4401) * 0.1; //this equation obtained by graphing pwm vs jaw rpm; paper_speed is an int to truncate decimals. Multiply by 0.1 to scale pwm
+    offset = 300 * (10 / paper_speed); //timing offset between finger and register; 300ms offset when paper_speed is 10(PWM). 
+                                       //If paper_speed changes this should appropriately modify offset to match the new speed
+
     //map(setpoint, 48, 505, 5, 155); //convert the setpoint to pwm
     
     setBtnFlag = 0; //reset so do not enter subroutine again unless button pressed again
   }
-
 
