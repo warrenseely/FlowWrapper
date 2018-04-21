@@ -5,16 +5,17 @@ void printData(int data) //pass in an integer to determine values to print
 //        Serial.print("Paper setpoint pkg/min: "); //user given
 //        Serial.println(setpoint); //send out on usb
 //        Serial.print("Paper setpoint pkg/min actual: "); //calculated during runtime
-//        Serial.println(pkgPerMinute);
-        Serial.print("Feeder speed: "); //send out on usb
-        Serial.println(feeder_speed); //sent out from PID
-        Serial.print("Pkg since last start: "); //real time count
-        Serial.println(pkgcount); //send out on usb   
-        Serial.print("papercount: "); 
-        Serial.println(paper_count);   
-        Serial.print("feedercount: ");
-        Serial.println(feeder_count);
-        Serial.println();
+        Serial.print(integral);
+        Serial.print(", "); //send out on usb
+        Serial.print(feeder_speed); //sent out from PID
+        Serial.print(", ");//timingScalarcopy: "); //real time count
+        Serial.print(timingScalarcopy*100); //send out on usb   
+        Serial.print(", ");//papercount: "); 
+        Serial.print(paper_count);   
+        Serial.print(", ");//feedercount: ");
+        Serial.print(feeder_count);
+        Serial.print(", ");
+        Serial.println(tdc);//
       break;
       case 2:
         Serial.print("Paper actual pkg/min: "); //calculated during runtime
@@ -49,8 +50,7 @@ void printData(int data) //pass in an integer to determine values to print
               flag = 0;
           }
         }
-      break;
-      
+      break;      
   }
 }
 
@@ -124,4 +124,3 @@ void livePIDTune(void)
       Serial.println(kd);
     }//end pid and feeder drive settings if statement
 }
-
