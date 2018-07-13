@@ -6,13 +6,16 @@ void button_results()
       StartBtnState = 0;
       StopBtnState = 1;
       currently_running = 0; //we are not currently running for subsequent loops
+      totalpkgcount += pkgcount; //preserve
       pkgcount = 0; //reset
       homeflag = 0; //reset flag used for startup
       PCICR &= ~(1 << PCIE0); //disable pin change interrupts for port B
       PCICR &= ~(1 << PCIE2);    // disable pin change interrupts for D0 to D7
-      PCICR &= ~(1 << PCIE1); //disable pin changei nterrupts for port C
+      PCICR &= ~(1 << PCIE1); //disable pin change interrupts for port C
       //Serial.println("STOP BUTTON PRESSED");
-       writeLCD("STOP BUTTON PRESSED");
+       writeLCD("STOP BUTTON PRESSED", 0);
+       writeLCD("totalpkgs:", 0);
+       writeLCD(totalpkgcount, 0);
   }
   if(startBtn.wasReleased() && !currently_running && !StartBtnState && StopBtnState) //we are reading a press and release; if we have not been here prior
   {
@@ -35,3 +38,4 @@ void button_results()
     setBtnFlag = 1;
   }
 }
+

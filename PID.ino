@@ -1,6 +1,7 @@
 void feederPID(void) //calculate PID control for the feeder chain speed
 {
   long proportional = 0, integraltemp = 0, derivative = 0, intround = 0;
+  int MaxIntegral = 200; //167?
 
   //ensure we round the correct direction
   if(feeder_error >= 0)
@@ -18,7 +19,17 @@ void feederPID(void) //calculate PID control for the feeder chain speed
   proportional = kp * feeder_error; //proportional value * error in the encoder counts
 
 //  //integral
-  integral = integral + (feeder_error); //sum of the errors for all time
+  //integral = integral + (feeder_error); //sum of the errors for all time
+
+  int temp1 = integral + feeder_error; //copy of what our new integral term would be if we added in current error
+  //windup limits
+  if(temp1 > MaxIntegral) //if it is bigger than limit
+   integral = MaxIntegral; //set integral to the max
+  else if(temp1 < -MaxIntegral) //if it is smaller than -limit
+   integral = -MaxIntegral; //set integral to negative max
+  else
+    integral = temp1; //copy new integral value
+     
   integraltemp = ki * integral; //integral scalar
 
   //derivative
@@ -54,3 +65,4 @@ void feederPID(void) //calculate PID control for the feeder chain speed
 //  temp = map(temp, 0, maxchainTime, 15, 155); //
 //  jawpwm = constrain(temp, 15, 155); //0 = 0v, 255 = 10v = full speed!
 //}
+
