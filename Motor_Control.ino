@@ -10,7 +10,7 @@ void motorDrive(int state)
       analogWrite(paperPWM, 0); //paper feed
       analogWrite(jawPWM, 0); //jaws
       //Serial.println("STOP BUTTON PRESSED");
-      writeLCD("STOP BUTTON PRESSED");
+      writeLCD("STOP BUTTON PRESSED", 0);
     }
   }
 
@@ -26,7 +26,7 @@ void motorDrive(int state)
             analogWrite(jawPWM, jaw_speed); //write the speed of the film during cut(hardcode for homing)
             PORTC |= (1 << PORTC3); //enable the jaws
             //Serial.println("homing jaws");  
-            writeLCD("homing jaws");          
+            writeLCD("homing jaws", 0);          
           }
           if(jawhomeflag == 1) //have the jaws shut off via interrupt?
           {
@@ -34,7 +34,7 @@ void motorDrive(int state)
             jawhomeflag = 0; //reset
             homeflag = 0; //reset for next state
             //Serial.println("finished homing jaws");
-            writeLCD("finished homing jaws");
+            writeLCD("finished homing jaws", 0);
           }
         break;
         case 2: //align paper
@@ -46,7 +46,7 @@ void motorDrive(int state)
             analogWrite(paperPWM, 10); //write the speed during homing(hardcode for homing)
             PORTC |= (1 << PORTC4); //enable paper vfd
             //Serial.println("homing paper");
-            writeLCD("homing paper");
+            writeLCD("homing paper", 0);
           }
           if(paperhomeflag) //have we seen a register mark?
           {
@@ -54,7 +54,7 @@ void motorDrive(int state)
             paperhomeflag = 0; //reset
             homeflag = 0; //reset for next state
             //Serial.println("finished homing paper");
-            writeLCD("finished homing paper");
+            writeLCD("finished homing paper", 0);
           }
         break;
         case 3: //align feeder chain
@@ -65,7 +65,7 @@ void motorDrive(int state)
             analogWrite(feederPWM, 60); //15 write the speed during homing(hardcode for homing)
             PORTC |= (1 << PORTC5); //enable feeder vfd, shut off by pin change interrupt on A0 when finger is seen
             //Serial.println("homing feeder");
-             writeLCD("homing and priming feeder");
+             writeLCD("homing and priming feeder", 0);
           }
           if((PIND & bit(PattySensor_PIN))) //pin goes HIGH when we see a patty
           {
@@ -79,7 +79,7 @@ void motorDrive(int state)
             homeflag = 0; //reset flag
             startupFlag = 5; //we saw the feeder reach home, now we are done homing machine
             //Serial.println("finished homing feeder");
-             writeLCD("finished homing feeder");
+             writeLCD("finished homing feeder", 0);
             startTime = millis(); //preserve for startup delay
           }
        break; 
@@ -88,7 +88,7 @@ void motorDrive(int state)
          if((unsigned long)(currentTime - startTime) >= startupDelay) //we have aligned all axis now we wait for two seconds(timed loop = 100ms X 20 = 2000ms = 2 seconds)
          {
             //Serial.println("Starting");
-            writeLCD("Starting");
+            writeLCD("Starting", 0);
             //startupDelay = 0; //reset
             startupFlag = 0; //set flag so no longer enter this subroutine
             PCICR &= ~(1 << PCIE0); //disable pin change interrupts for port B
@@ -101,7 +101,8 @@ void motorDrive(int state)
             PCICR |= bit (PCIE2);    // enable pin change interrupts for D0 to D7
             feeder_count = 0; //reset to 0 for startup
             paper_count = 0; //reset to 0 for startup
-            
+            timingScalar = timingScalarcopy = 0;
+            timeDifference = 0;
             //get the starting speeds
             jaw_speed = (paper_speed * jawScalar) + 0.5; //start at scaled speed of paper, add 0.5 so it is rounded to nearest integer by truncation
             feeder_speed = (paper_speed * feederScalar) + 0.5; //start at scaled speed of paper, add 0.5 so it is rounded to nearest integer by truncation
@@ -131,7 +132,7 @@ void motorDrive(int state)
       {
         dataloop = 1;
         //Serial.println("Setpoint out of range! Please enter packages per minute between 48 and 505");
-        writeLCD("Setpoint out of range! Please enter packages per minute between 48 and 505");
+        writeLCD("Setpoint out of range! Please enter packages per minute between 48 and 505", 0);
       }
       else //valid number
       {
@@ -147,4 +148,5 @@ void motorDrive(int state)
     
     setBtnFlag = 0; //reset so do not enter subroutine again unless button pressed again
   }
+
 

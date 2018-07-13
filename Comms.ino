@@ -5,17 +5,17 @@ void printData(int data) //pass in an integer to determine values to print
 //        Serial.print("Paper setpoint pkg/min: "); //user given
 //        Serial.println(setpoint); //send out on usb
 //        Serial.print("Paper setpoint pkg/min actual: "); //calculated during runtime
-        Serial.print(integral);
-        Serial.print(", "); //send out on usb
+//        Serial.print(integral);
+        Serial.print(" "); //send out on usb
         Serial.print(feeder_speed); //sent out from PID
-        Serial.print(", ");//timingScalarcopy: "); //real time count
-        Serial.print(timingScalarcopy*100); //send out on usb   
-        Serial.print(", ");//papercount: "); 
-        Serial.print(paper_count);   
-        Serial.print(", ");//feedercount: ");
-        Serial.print(feeder_count);
-        Serial.print(", ");
-        Serial.println(tdc);//
+        Serial.print(" ");//timingScalarcopy: "); //real time count
+        Serial.print(timingScalarcopy, 3); //send out on usb with 3 decimal points precision   
+        Serial.print(" ");//papercount: "); 
+//        Serial.print(paper_count);   
+//        Serial.print(" ");//feedercount: ");
+//        Serial.println(feeder_count);
+//        Serial.print(" ");
+        Serial.println(timeDifference);//
       break;
       case 2:
         Serial.print("Paper actual pkg/min: "); //calculated during runtime
@@ -55,45 +55,74 @@ void printData(int data) //pass in an integer to determine values to print
 }
 
 //write a string to the LCD; Utilizes function overloading to determine input data type
-void writeLCD(char *string) //takes a string or int and writes to the LCD display. Set unused type to "0" or 0 respectively
+void writeLCD(char *string, int Hcursor) //takes a string or int and writes to the LCD display. Set unused type to "0" or 0 respectively
 {
   const unsigned char home_cursor[] = {27, '[', 'j', '\0'};
-  
-  for(int i = 0; i < 3; i++) //loop and send the home sequence
-    Serial.write(home_cursor[i]);
+  //const unsigned char cursor_L2[] = {27, '[', '<' '\0'};
+
+  if(Hcursor == 0) //0 means we are printing after nothing else and can home the cursor
+  {
+    for(int i = 0; i < 3; i++) //loop and send the home sequence
+      Serial.write(home_cursor[i]);
+  }
+  else if(Hcursor == 1) //1 means we are printing after something so we want to start on next line
+  {
+    
+  }
     
   Serial.print(string);
 }
 
 //write an int to the LCD; Utilizes function overloading to determine input data type
-void writeLCD(int data) //takes an int and writes to the LCD display. 
+void writeLCD(int data, int Hcursor) //takes an int and writes to the LCD display. 
 {
   const unsigned char home_cursor[] = {27, '[', 'j', '\0'};
- 
-  for(int i = 0; i < 3; i++) //loop and send the home sequence
-    Serial.write(home_cursor[i]);
+
+  if(Hcursor == 0) //0 means we are printing nothing else and can home the cursor
+  {
+    for(int i = 0; i < 3; i++) //loop and send the home sequence
+      Serial.write(home_cursor[i]);
+  }
+  else if(Hcursor == 1) //1 means we are printing after something so we want to start on next line
+  {
+    
+  }
     
   Serial.print(data);
 }
 
 //write a float to the LCD; Utilizes function overloading to determine input data type
-void writeLCD(float data) //takes an int and writes to the LCD display. 
+void writeLCD(float data, int Hcursor) //takes an int and writes to the LCD display. 
 {
   const unsigned char home_cursor[] = {27, '[', 'j', '\0'};
- 
-  for(int i = 0; i < 3; i++) //loop and send the home sequence
-    Serial.write(home_cursor[i]);
+
+  if(Hcursor == 0) //0 means we are printing nothing else and can home the cursor
+  {
+    for(int i = 0; i < 3; i++) //loop and send the home sequence
+      Serial.write(home_cursor[i]);
+  }
+  else if(Hcursor == 1) //1 means we are printing after something so we want to start on next line
+  {
+    
+  }
     
   Serial.print(data);
 }
 
 //write an int to the LCD; Utilizes function overloading to determine input data type
-void writeLCD(long int data) //takes an int and writes to the LCD display. 
+void writeLCD(long int data, int Hcursor) //takes an int and writes to the LCD display. 
 {
   const unsigned char home_cursor[] = {27, '[', 'j', '\0'};
- 
-  for(int i = 0; i < 3; i++) //loop and send the home sequence
-    Serial.write(home_cursor[i]);
+
+  if(Hcursor == 0) //0 means we are printing nothing else and can home the cursor
+  {
+    for(int i = 0; i < 3; i++) //loop and send the home sequence
+      Serial.write(home_cursor[i]);
+  }
+  else if(Hcursor == 1) //1 means we are printing after something so we want to start on next line
+  {
+    
+  }
     
   Serial.print(data);
 }
@@ -119,8 +148,9 @@ void livePIDTune(void)
       //settings changed, print them out
       Serial.print(kp);
       Serial.print(", ");
-      Serial.print(ki*100);
+      Serial.print(ki, 4); //print 4 decimal points precision
       Serial.print(", ");
       Serial.println(kd);
     }//end pid and feeder drive settings if statement
 }
+
